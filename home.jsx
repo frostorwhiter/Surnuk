@@ -76,7 +76,7 @@ function TopNav({ route, go, cartCount, search, setSearch, tone }) {
       <button className="brand" onClick={() => go('home')}>
         <Wedge size={32} />
         <div>
-          <div className="brand-name">СИРНИК</div>
+          <div className="brand-name">СИРНИК!</div>
           <div className="brand-sub">{tone === 'absurd' ? 'крамниця обробленого молока' : 'крамниця сиру'}</div>
         </div>
       </button>
