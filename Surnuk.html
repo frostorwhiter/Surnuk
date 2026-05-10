@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Сирник — крамниця сиру</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="home.jsx"></script>
+<script type="text/babel" src="screens.jsx"></script>
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "tone": "absurd"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [route, setRoute] = useState('home');
+  const [search, setSearch] = useState('');
+  const [items, setItems] = useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('sirnyk-cart') || '[]');
+      return raw.map(it => {
+        if (it && it.product && it.product.id) return it;
+        const product = PRODUCTS.find(p => p.id === (it && it.pid));
+        return product ? { product, weight: it.weight, qty: it.qty } : null;
+      }).filter(Boolean);
+    } catch { return []; }
+  });
+  const [activeProduct, setActiveProduct] = useState(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [orderNo, setOrderNo] = useState(null);
+
+  // hydrate cart items product refs (since we serialized only basic info)
+  useEffect(() => {
+    localStorage.setItem('sirnyk-cart', JSON.stringify(items.map(it => ({ pid: it.product.id, weight: it.weight, qty: it.qty }))));
+  }, [items]);
+
+
+  const cartCount = items.reduce((s, it) => s + it.qty, 0);
+  const subtotal = items.reduce((s, it) => s + priceFor(it.product, it.weight) * it.qty, 0);
+  const delivery = subtotal === 0 ? 0 : (subtotal > 800 ? 0 : 80);
+  const total = subtotal + delivery;
+
+  const addToCart = (product, weight = 250, qty = 1) => {
+    setItems(arr => {
+      const idx = arr.findIndex(it => it.product.id === product.id && it.weight === weight);
+      if (idx >= 0) {
+        const next = arr.slice();
+        next[idx] = { ...next[idx], qty: next[idx].qty + qty };
+        return next;
+      }
+      return [...arr, { product, weight, qty }];
+    });
+  };
+
+  // expose product opener for cards
+  useEffect(() => {
+    window.__openProduct = (id) => {
+      const p = PRODUCTS.find(x => x.id === id);
+      if (p) setActiveProduct(p);
+    };
+  }, []);
+
+  // scroll to top on route change
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [route]);
+
+  const go = (r) => setRoute(r);
+
+  const handlePlace = () => {
+    setOrderNo(String(Math.floor(Math.random() * 90000) + 10000));
+    setRoute('success');
+  };
+  const reset = () => setItems([]);
+
+  return (
+    <div className="page">
+      <TopNav route={route} go={go} cartCount={cartCount} search={search} setSearch={setSearch} tone={t.tone} />
+
+      {route === 'home' && <HomePage go={go} tone={t.tone} addToCart={addToCart} />}
+      {route === 'about' && <AboutPage go={go} tone={t.tone} />}
+      {route === 'catalog' && <Catalog go={go} tone={t.tone} addToCart={addToCart} search={search} />}
+      {route === 'cart' && <Cart go={go} items={items} setItems={setItems} tone={t.tone} openConfirm={() => setShowConfirm(true)} />}
+      {route === 'checkout' && <Checkout go={go} items={items} total={total} tone={t.tone} onPlace={handlePlace} />}
+      {route === 'success' && <Success go={go} orderNo={orderNo} items={items} total={total} tone={t.tone} reset={reset} />}
+
+      {activeProduct && <ProductDetail product={activeProduct} go={go} addToCart={addToCart} tone={t.tone} close={() => setActiveProduct(null)} />}
+
+      {showConfirm && (
+        <ConfirmModal
+          items={items}
+          total={total}
+          tone={t.tone}
+          onConfirm={() => { setShowConfirm(false); setRoute('checkout'); }}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
+
+      <footer className="footer">
+        <div className="footer-row">
+          <div className="footer-brand">
+            <Wedge size={24} />
+            <strong>СИРНИК</strong>
+            <span>· {t.tone === 'absurd' ? 'крамниця обробленого молока з 2024' : 'крамниця сиру'}</span>
+          </div>
+          <div className="footer-links">
+            <span>контакт: +380 67 СИР СИР · </span>
+            <span>пн–нд 9:00–22:00 · </span>
+            <span>{t.tone === 'absurd' ? 'у разі плісняви — це фіча' : 'м. Київ, вул. Сирна, 7'}</span>
+          </div>
+        </div>
+        <div className="footer-tiny">© Сирник · усі сори і всі сири захищені</div>
+      </footer>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="Тон копірайтингу">
+          <TweakRadio
+            value={t.tone}
+            onChange={(v) => setTweak('tone', v)}
+            options={[{ value: 'mild', label: 'стримано' }, { value: 'absurd', label: 'абсурд' }]}
+          />
+          <p style={{ fontSize: 12, color: '#6e5a3f', margin: '8px 0 0', fontFamily: 'JetBrains Mono, monospace' }}>
+            перемикає мікротексти, гасла та easter eggs по всьому сайту
+          </p>
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+<style>
+.footer { border-top: 1.5px solid var(--ink); padding: 24px 32px 32px; background: var(--ink); color: var(--cream); margin-top: 40px; }
+.footer-row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
+.footer-brand { display: flex; align-items: center; gap: 10px; font-family: 'Fraunces', serif; }
+.footer-brand span { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.06em; opacity: 0.7; text-transform: uppercase; }
+.footer-links { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; letter-spacing: 0.04em; opacity: 0.85; }
+.footer-tiny { margin-top: 14px; padding-top: 14px; border-top: 1px dashed rgba(250,243,226,0.3); font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: 0.6; }
+@media (max-width: 700px) { .footer { padding: 20px 16px; } }
+</style>
+</body>
+</html>
